@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ADITYA OSINT</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+    <!-- ====== MATRIX BACKGROUND ====== -->
+    <div class="matrix-bg" id="matrixBg"></div>
+    <div class="glow-center"></div>
+
+    <!-- ====== MAIN CONTAINER ====== -->
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">
+                <div class="logo-icon"></div>
+                <div class="logo-text">ADITYA OSINT <\></div>
+            </div>
+            <p class="tagline">Advanced OSINT Lookup Tool</p>
+            <p class="owner">By Aditya </> </p>
+        </div>
+
+        <!-- Search Card -->
+        <div class="search-card">
+            <h2 class="search-title">Mobile Number Lookup</h2>
+            <div class="input-group">
+                <input type="text" id="mobile" placeholder="Enter Mobile Number (e.g., 9976543210)" />
+                <button onclick="lookup()">
+                    <span></span> Search
+                </button>
+            </div>
+            <p class="search-hint">Enter a 10-digit mobile number</p>
+        </div>
+
+        <!-- Result Card -->
+        <div class="result-card" id="result"></div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Aditya OSINT Tool © @Aditya</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
