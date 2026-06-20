@@ -1,6 +1,6 @@
 /* ============================================
    SCRIPT.JS — ADITYA OSINT
-   Multi‑proxy with 300+ fallback endpoints
+   Multi‑proxy fallback, smart JSON parsing
    ============================================ */
 
 // ===== MATRIX BACKGROUND =====
@@ -52,61 +52,164 @@
     }
 })();
 
-// ============================================================
-//   PROXY POOL – 300+ UNIQUE ENDPOINTS
-// ============================================================
+// ===== PROXY LIST (expanded & shuffled for reliability) =====
+const PROXIES = [
+    'https://api.allorigins.win/raw?url=',        // reliable, raw response
+    'https://corsproxy.io/?',                      // simple and fast
+    'https://cors-anywhere.herokuapp.com/',        // may require origin header, but usually works
+    'https://thingproxy.freeboard.io/fetch/',      // another free proxy
+    'https://proxy.cors.sh/',                      // also reliable (sometimes)
+    'https://cors.bridged.cc/'                     // less common but works
+];
 
-function generateProxyPool() {
-    // Base proxy templates (these are known free CORS proxies)
-    const baseTemplates = [
-        'https://api.allorigins.win/raw?url=',
-        'https://corsproxy.io/?',
-        'https://cors-anywhere.herokuapp.com/',
-        'https://thingproxy.freeboard.io/fetch/',
-        'https://proxy.cors.sh/',
-        'https://cors.bridged.cc/',
-        'https://corsproxy.co/',
-        'https://cors.deno.dev/',
-        'https://cors.5apps.com/',
-        'https://cors.ceda.ac.uk/',
-        'https://cors-anywhere.azurewebsites.net/',
-        'https://cors-proxy.herokuapp.com/',
-        'https://cors-proxy1.herokuapp.com/',
-        'https://cors-proxy2.herokuapp.com/',
-        'https://cors-proxy3.herokuapp.com/',
-        'https://cors-proxy4.herokuapp.com/',
-        'https://cors-proxy5.herokuapp.com/',
-        'https://cors-proxy6.herokuapp.com/',
-        'https://cors-proxy7.herokuapp.com/',
-        'https://cors-proxy8.herokuapp.com/',
-        'https://cors-proxy9.herokuapp.com/',
-        'https://cors-proxy10.herokuapp.com/',
-        'https://cors-proxy11.herokuapp.com/',
-        'https://cors-proxy12.herokuapp.com/',
-        'https://cors-proxy13.herokuapp.com/',
-        'https://cors-proxy14.herokuapp.com/',
-        'https://cors-proxy15.herokuapp.com/',
-        'https://cors-proxy16.herokuapp.com/',
-        'https://cors-proxy17.herokuapp.com/',
-        'https://cors-proxy18.herokuapp.com/',
-        'https://cors-proxy19.herokuapp.com/',
-        'https://cors-proxy20.herokuapp.com/',
-        'https://cors-anywhere.glitch.me/',
-        'https://cors-anywhere2.glitch.me/',
-        'https://cors-anywhere3.glitch.me/',
-        'https://cors-anywhere4.glitch.me/',
-        'https://cors-anywhere5.glitch.me/',
-        'https://cors-anywhere6.glitch.me/',
-        'https://cors-anywhere7.glitch.me/',
-        'https://cors-anywhere8.glitch.me/',
-        'https://cors-anywhere9.glitch.me/',
-        'https://cors-anywhere10.glitch.me/',
-    ];
+// ===== FETCH WITH PROXY FALLBACK =====
+async function fetchWithProxies(targetUrl) {
+    // Shuffle proxies so we don't always hit the same one first
+    const shuffled = [...PROXIES].sort(() => Math.random() - 0.5);
 
-    // Generate variations: each base can have multiple suffixes (random subdomains, query params)
-    const proxyList = [];
-    const seed = Date.now();
+    let lastError = null;
 
+    for (const proxyBase of shuffled) {
+        const proxyUrl = proxyBase + encodeURIComponent(targetUrl);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout per proxy
+
+        try {
+            const res = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status} – ${res.statusText}`);
+            }
+
+            // Read the raw text first
+            const text = await res.text();
+
+            // Try to parse as JSON – if it fails, the API might have returned plain text error
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (parseErr) {
+                // If the response isn't JSON, it could be an error page or plain text
+                throw new Error(`Proxy returned non‑JSON: ${text.slice(0, 100)}${text.length > 100 ? '…' : ''}`);
+            }
+
+            // If the parsed object has an "error" field, treat it as an error
+            if (data && typeof data === 'object' && data.error) {
+                throw new Error(data.error);
+            }
+
+            // All good
+            return data;
+        } catch (err) {
+            clearTimeout(timeoutId);
+            console.warn(`Proxy ${proxyBase} failed:`, err.message);
+            lastError = err;
+            // Continue to next proxy
+        }
+    }
+
+    // If we get here, all proxies failed
+    throw new Error(lastError ? lastError.message : 'All CORS proxies failed. Please check your network or try again later.');
+}
+
+// ===== LOOKUP FUNCTION =====
+async function lookup() {
+    const input = document.getElementById('mobile');
+    const term = input.value.trim();
+
+    if (!term || !/^\d{10}$/.test(term)) {
+        alert('Please enter a valid 10-digit number');
+        return;
+    }
+
+    const resultDiv = document.getElementById('result');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = `
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <p>Scanning databases for information...</p>
+        </div>
+    `;
+
+    const targetApi = `http://69.62.84.105:7000/api/search?num=${term}`;
+
+    try {
+        const data = await fetchWithProxies(targetApi);
+
+        // Success: display the result
+        resultDiv.innerHTML = `
+            <div class="result-header">
+                <h3 class="result-title">
+                    <span>📱</span> Lookup Results for ${term}
+                </h3>
+                <div class="result-actions">
+                    <button onclick="exportData()">📥 Export</button>
+                    <button onclick="clearResults()">🗑️ Clear</button>
+                </div>
+            </div>
+            <div class="result-content">
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            </div>
+        `;
+    } catch (err) {
+        console.error('Lookup error:', err);
+        // Show a user‑friendly error with a retry hint
+        resultDiv.innerHTML = `
+            <div class="result-header">
+                <h3 class="result-title">⚠️ Request Failed</h3>
+                <div class="result-actions">
+                    <button onclick="clearResults()">🗑️ Clear</button>
+                </div>
+            </div>
+            <div class="result-content">
+                <p style="color: var(--error);">
+                    <strong>Could not fetch data.</strong><br />
+                    ${err.message || 'Unknown error.'}
+                </p>
+                <p style="color: var(--text-secondary); margin-top: 10px; font-size: 0.9rem;">
+                    Suggestions:<br />
+                    • Double‑check the number and try again.<br />
+                    • The API server might be temporarily offline.<br />
+                    • If you’re behind a strict firewall, try using a VPN.<br />
+                    <button onclick="lookup()" style="margin-top: 12px; padding: 8px 20px; background: var(--primary-dark); color: #fff; border: none; border-radius: 8px; cursor: pointer;">🔄 Retry</button>
+                </p>
+            </div>
+        `;
+    }
+}
+
+// ===== EXPORT =====
+function exportData() {
+    const resultDiv = document.getElementById('result');
+    const pre = resultDiv.querySelector('pre');
+    if (!pre) return;
+
+    const data = pre.textContent;
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `osint-lookup-${document.getElementById('mobile').value}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ===== CLEAR =====
+function clearResults() {
+    const resultDiv = document.getElementById('result');
+    resultDiv.style.display = 'none';
+    resultDiv.innerHTML = '';
+    document.getElementById('mobile').value = '';
+}
+
+// ===== ENTER KEY =====
+document.getElementById('mobile').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') lookup();
+});
     // For each base, create 8 variations with different cache-busting parameters
     for (const base of baseTemplates) {
         // Add the base itself
